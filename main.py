@@ -14,6 +14,25 @@ def fetch_html(url):
         logging.error("Failed to fetch HTML content from the endpoint: %s", url)
         return None
 
+# Function to parse the price string and return the symbol and parsed price
+def parse_price(price_str):
+    symbol = None
+    price = None
+    
+    if len(price_str) >= 2:
+        symbol = price_str[0]  # Extract the currency symbol
+        try:
+            # Attempt to parse the price part as a float
+            price = float(price_str[1])
+        except ValueError:
+            logging.warning("Error parsing price: %s", price_str)
+    
+    # Check if symbol and price are both None, indicating a single-value case
+    if symbol is None and price is None and len(price_str) == 1:
+        price = price_str[0]
+    
+    return symbol, price
+
 # Function to fetch product details and write them to CSV
 def fetch_and_write_product_data(product_url, writer, tag):
     logging.info("Fetching data from %s", product_url)
@@ -25,8 +44,8 @@ def fetch_and_write_product_data(product_url, writer, tag):
 
         # Product price
         price_span = soup.find('span', class_='price')
-        symbol = price_span.find('span', class_='woocommerce-Price-currencySymbol').text.strip()
-        price = symbol + price_span.text.replace(symbol, '').strip()
+        price_parts = price_span.text.strip().split()
+        symbol, price = parse_price(price_parts)
 
         # Product Brand
         brand_tag = soup.find('p', class_='brand_product').find('a')
@@ -71,21 +90,36 @@ def fetch_and_write_product_data(product_url, writer, tag):
         # Find the additional information panel and print its content
         body = soup.find("div", class_="wc-tabs-wrapper")
 
-        # Find the additional information panel
-        description_panel = body.find("div", class_="woocommerce-Tabs-panel--description")
+
+        # Extracting product description
+        description_div = body.find('div', class_='woocommerce-Tabs-panel--description')
 
         # Initialize an empty string to store the description
-        description = ''
+        description_html = ''
 
-        # Find all 'p' tags within the description panel
-        paragraphs = description_panel.find_all("p")
+        if description_div:
+            # Find all spans with class 'sku_wrapper' and remove the last one
+            sku_spans = description_div.find_all('span', class_='sku_wrapper')
+            if sku_spans:
+                last_sku_span = sku_spans[-1]
+                last_sku_span.decompose()
 
-        # Extracting only the first three paragraphs from the array
-        first_three_paragraphs = paragraphs[:3]
+            # Extract HTML content from all the paragraphs inside the description div
+            paragraphs = description_div.find_all('p', style=lambda value: value is None or value.strip().lower() != 'display: none;')
+            for paragraph in paragraphs:
+                # Exclude the paragraph containing the span with display: none;
+                if not paragraph.find('span', style=lambda value: value is not None and 'display: none;' in value):
+                    description_html += str(paragraph) + '\n'
 
-        for paragraph in first_three_paragraphs:
-            description += str(paragraph)
+            # Find the next div
+            next_div = description_div.find_next_sibling('div', class_='woocommerce-Tabs-panel')
+            if next_div:
+                # Extract HTML content from all the list items inside the next div
+                list_items = next_div.find_all('li', style=lambda value: value is None or value.strip().lower() != 'display: none;')
+                for li in list_items:
+                    description_html += str(li) + '\n'
 
+        print(description_html)
         images_length = len(image_urls)
         sizes_length = len(sizes)
         if body:
@@ -104,7 +138,7 @@ def fetch_and_write_product_data(product_url, writer, tag):
             if len(split_content) >= 2:
                 product_sku = split_content[1].strip()
             else:
-                logging.warning("No second data found after splitting by ':'")
+                logging.warning("There was error getting sku of product")
         else:
             logging.warning("No paragraphs found within the description div or insufficient paragraphs")
 
@@ -113,7 +147,7 @@ def fetch_and_write_product_data(product_url, writer, tag):
         max_length = max(sizes_length, images_length)
         for index in range(max_length):
             if index == 0:
-                csv_row = [handle, product_title, description, brand_name, None , product_type , tag , False, 'Size', sizes[index] if index < sizes_length else None, 'Color',color if index < sizes_length else None, product_sku+"-"+color, 0 , 'shopify', 1, 'deny','manual', price, None , True, False, None, image_urls[index] if index < images_length else None , (index+1) if index < images_length else None, product_title.lower().replace(" ", "-") if index < images_length else None, False , None,None,None,None,None,None,None,None,None,None,None,None,None,None,'kg',None,None,True, True, None, None, 'active']
+                csv_row = [handle, product_title, description_html, brand_name, None , product_type , tag , False, 'Size', sizes[index] if index < sizes_length else None, 'Color',color if index < sizes_length else None, product_sku+"-"+color, 0 , 'shopify', 1, 'deny','manual', price, None , True, False, None, image_urls[index] if index < images_length else None , (index+1) if index < images_length else None, product_title.lower().replace(" ", "-") if index < images_length else None, False , None,None,None,None,None,None,None,None,None,None,None,None,None,None,'kg',None,None,True, True, None, None, 'active']
             else:
                 csv_row = [handle, None, None, None, None, None, None ,None, None, sizes[index] if index < sizes_length else None, None ,color if index < sizes_length else None, None, 0 if index < sizes_length else None, None, 1 if index < sizes_length else None, 'deny' if index < sizes_length else None,'manual' if index < sizes_length else None, price if index < sizes_length else None, None, True if index < sizes_length else None, False if index < sizes_length else None, None, image_urls[index] if index < images_length else None , (index+1) if index < images_length else None, product_title.lower().replace(" ", "-")  if index < images_length else None,None, None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None,None, None, None, None, None]
             # Writing data to CSV 
@@ -130,7 +164,7 @@ def main():
     if female_html and male_html:
         logging.info("HTML content successfully fetched from the endpoints.")
 
-        fieldnames = ['Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tag', 'Published', 'Option1 Name', 'Option1 Value', 'Option 2 Name', 'Option2 Value', 'Variant SKU', 'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty', 'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price', 'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode', 'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category', 'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN', 'Google Shopping / Condition', 'Google Shopping / Custom Product', 'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3', 'Google Shopping / Custom Label 4', 'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item', 'Include / Japan', 'Include / International', 'Price / International', 'Compare At Price / International', 'Status']
+        fieldnames = ['Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tag', 'Published', 'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Variant SKU', 'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty', 'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price', 'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode', 'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category', 'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN', 'Google Shopping / Condition', 'Google Shopping / Custom Product', 'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3', 'Google Shopping / Custom Label 4', 'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item', 'Include / Japan', 'Include / International', 'Price / International', 'Compare At Price / International', 'Status']
         page_count = 0
         csv_count = 1
 
@@ -202,7 +236,7 @@ def process_products(html_content, writer, tag, page_count, csv_count):
             if page_count == 1:  # Create a new CSV file after how many pages
                 csv_count += 1
                 page_count = 0
-                fieldnames = ['Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tag', 'Published', 'Option1 Name', 'Option1 Value', 'Option 2 Name', 'Option2 Value', 'Variant SKU', 'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty', 'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price', 'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode', 'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category', 'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN', 'Google Shopping / Condition', 'Google Shopping / Custom Product', 'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3', 'Google Shopping / Custom Label 4', 'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item', 'Include / Japan', 'Include / International', 'Price / International', 'Compare At Price / International', 'Status']
+                fieldnames = ['Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tag', 'Published', 'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Variant SKU', 'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty', 'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price', 'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode', 'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category', 'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN', 'Google Shopping / Condition', 'Google Shopping / Custom Product', 'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3', 'Google Shopping / Custom Label 4', 'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item', 'Include / Japan', 'Include / International', 'Price / International', 'Compare At Price / International', 'Status']
 
                 writer = csv.writer(open(f'products_{csv_count}.csv', 'w', newline='', encoding='utf-8'))
                 writer.writerow(fieldnames)  # Write header for the new CSV file
