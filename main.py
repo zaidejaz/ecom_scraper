@@ -17,16 +17,23 @@ def fetch_html(url):
 # Function to parse the price string and return the symbol and parsed price
 def parse_price(price_str):
     symbol = None
-    price = None
-    
-    if len(price_str) >= 2:
-        symbol = price_str[0]  # Extract the currency symbol
-        try:
-            # Attempt to parse the price part as a float
-            price = float(price_str[1])
-        except ValueError:
-            logging.warning("Error parsing price: %s", price_str)
-    
+    prices = []
+
+    for price in price_str:
+        parts = price.split()
+        if len(parts) >= 2:
+            symbol = parts[0]  # Extract the currency symbol
+            try:
+                # Attempt to parse the price part as a float
+                price_value = float(parts[1].replace(',', ''))  # Remove comma if present
+                prices.append(price_value)
+            except ValueError:
+                logging.warning("Error parsing price: %s", price)
+        else:
+            logging.warning("Invalid price format: %s", price)
+
+    return symbol, prices
+
     # Check if symbol and price are both None, indicating a single-value case
     if symbol is None and price is None and len(price_str) == 1:
         price = price_str[0]
@@ -42,11 +49,18 @@ def fetch_and_write_product_data(product_url, writer, tag):
 
         # Extracting product details
 
-        # Product price
-        price_span = soup.find('span', class_='price')
-        price_parts = price_span.text.strip().split()
-        symbol, price = parse_price(price_parts)
+        # Find the price element
+        price_element = soup.find('p', class_='price')
 
+        # Extract the price value
+        if price_element:
+            price_span = price_element.find('span', class_='woocommerce-Price-amount')
+            if price_span:
+                price = price_span.text.strip()
+            else:
+                print("Price element not found")
+        else:
+            print("Price element not found")
         # Product Brand
         brand_tag = soup.find('p', class_='brand_product').find('a')
         brand_name = brand_tag.text
@@ -64,15 +78,20 @@ def fetch_and_write_product_data(product_url, writer, tag):
         table_tag = soup.find('table', class_='variations')
         select_tag = table_tag.find('select', id='taglia')
         sizes_set = {option.text.split(' - ')[0].split(' ')[-1].strip() for option in select_tag.find_all('option') if option.text.strip() and option['value']}
-        sizes = list(sizes_set)[:5]   # Convert set back to a list if needed
+        sizes = list(sizes_set)
         # Product Images
         slider_parent = soup.find('div', class_='woocommerce-product-gallery')
         image_urls = []
         if slider_parent:
             slider_images = slider_parent.find_all('img')
+            # Convert to set to remove duplicates
+            image_urls_set = set()
             for img in slider_images:
                 image_url = img['src']
-                image_urls.append(image_url)
+                # Check if the image size is not 150X150
+                if '150x150' not in image_url:
+                    image_urls_set.add(image_url) # Convert back to list
+            image_urls = list(image_urls_set)
 
         # Find the div with class 'site-breadcrumbs woocommerce-breadcrumbs clr'
         breadcrumbs_div = soup.find('div', class_='site-breadcrumbs woocommerce-breadcrumbs clr')
@@ -101,25 +120,33 @@ def fetch_and_write_product_data(product_url, writer, tag):
             # Find all spans with class 'sku_wrapper' and remove the last one
             sku_spans = description_div.find_all('span', class_='sku_wrapper')
             if sku_spans:
-                last_sku_span = sku_spans[-1]
+                last_sku_span = sku_spans[-1]       
                 last_sku_span.decompose()
-
+        
             # Extract HTML content from all the paragraphs inside the description div
             paragraphs = description_div.find_all('p', style=lambda value: value is None or value.strip().lower() != 'display: none;')
             for paragraph in paragraphs:
                 # Exclude the paragraph containing the span with display: none;
                 if not paragraph.find('span', style=lambda value: value is not None and 'display: none;' in value):
                     description_html += str(paragraph) + '\n'
-
+        
             # Find the next div
             next_div = description_div.find_next_sibling('div', class_='woocommerce-Tabs-panel')
             if next_div:
-                # Extract HTML content from all the list items inside the next div
-                list_items = next_div.find_all('li', style=lambda value: value is None or value.strip().lower() != 'display: none;')
-                for li in list_items:
-                    description_html += str(li) + '\n'
+                # Extract HTML content from all the spans and strong tags inside the next div
+                next_elements = next_div.find_all(['strong', 'span'])
+                for element in next_elements:
+                    # Exclude the element if it contains the "Taglia" label
+                    if element.name == 'strong' and element.text.strip() == 'Taglia:':
+                        continue
+                    
+                    # Find the corresponding span tag
+                    next_span = element.find_next_sibling('span', class_='woocommerce-product-attributes-item__value')
+                    if next_span:
+                        # Concatenate the strong tag and the corresponding span tag in one line
+                        value_text = next_span.text.strip()
+                        description_html += f"<p>{str(element)}{value_text}</p>\n"
 
-        print(description_html)
         images_length = len(image_urls)
         sizes_length = len(sizes)
         if body:
