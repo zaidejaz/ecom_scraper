@@ -180,7 +180,6 @@ def fetch_and_write_product_data(product_url, writer, tag):
             writer.writerow(csv_row)
         logging.info("Writing data for %s", product_url)
 
-# Main function to fetch HTML from the website and process product data
 def main():
     base_url = "https://goccia.shop"
     female_endpoint = "/c/donna/"
@@ -190,25 +189,18 @@ def main():
     if female_html and male_html:
         logging.info("HTML content successfully fetched from the endpoints.")
 
-        fieldnames = ['Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tag', 'Published', 'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Variant SKU', 'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty', 'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price', 'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode', 'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category', 'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN', 'Google Shopping / Condition', 'Google Shopping / Custom Product', 'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3', 'Google Shopping / Custom Label 4', 'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item', 'Include / Japan', 'Include / International', 'Price / International', 'Compare At Price / International', 'Status']
         page_count = 0
         csv_count = 1
 
-        csvfile = open(f'products_{csv_count}.csv', 'w', newline='', encoding='utf-8')
-        writer = csv.writer(csvfile)
-        writer.writerow(fieldnames)
+        process_products(male_html, 'male', page_count, csv_count)
+        process_products(female_html, 'female', page_count, csv_count)
 
-        process_products(male_html, writer, 'male', page_count, csv_count)
-        process_products(female_html, writer, 'female', page_count, csv_count)
-
-        csvfile.close()  # Close the last CSV file after processing
-
-        logging.info("Data written to 'products.csv' files successfully.")
+        logging.info("Data written to 'products_male_{csv_count}.csv' and 'products_female_{csv_count}.csv' files successfully.")
     else:
         logging.error("Failed to fetch HTML content from the endpoints.")
 
 # Function to process products from HTML and fetch their details
-def process_products(html_content, writer, tag, page_count, csv_count):
+def process_products(html_content, tag, page_count, csv_count):
     logging.info("Processing Html of %s......", tag)
 
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -253,20 +245,24 @@ def process_products(html_content, writer, tag, page_count, csv_count):
 
             # Convert the set back to a list if needed
             unique_links_list = list(unique_links)
-            # Extract href attribute from each <a> tag
+
+            # Open CSV file for writing
+            fieldnames = ['Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tag', 'Published', 'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Variant SKU', 'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty', 'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price', 'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode', 'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category', 'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN', 'Google Shopping / Condition', 'Google Shopping / Custom Product', 'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3', 'Google Shopping / Custom Label 4', 'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item', 'Include / Japan', 'Include / International', 'Price / International', 'Compare At Price / International', 'Status']
+            csvfile = open(f'products_{tag}_{csv_count}.csv', 'w', newline='', encoding='utf-8')
+            writer = csv.writer(csvfile)
+            writer.writerow(fieldnames)  # Write header for the new CSV file
+
+            # Fetch and write product data
             for link in unique_links:
                 fetch_and_write_product_data(link, writer, tag)
 
+            csvfile.close()  # Close the CSV file
+
             page_count += 1
 
-            if page_count == 1:  # Create a new CSV file after how many pages
+            if page_count == 10:  # Create a new CSV file after how many pages
                 csv_count += 1
                 page_count = 0
-                fieldnames = ['Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tag', 'Published', 'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Variant SKU', 'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty', 'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price', 'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode', 'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category', 'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN', 'Google Shopping / Condition', 'Google Shopping / Custom Product', 'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3', 'Google Shopping / Custom Label 4', 'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item', 'Include / Japan', 'Include / International', 'Price / International', 'Compare At Price / International', 'Status']
-
-                writer = csv.writer(open(f'products_{csv_count}.csv', 'w', newline='', encoding='utf-8'))
-                writer.writerow(fieldnames)  # Write header for the new CSV file
-
         else:
             logging.error("Failed to fetch HTML content from the page: %s", page_link)
 
