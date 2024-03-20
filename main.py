@@ -82,17 +82,16 @@ def fetch_and_write_product_data(product_url, writer, tag):
         # Product Images
         slider_parent = soup.find('div', class_='woocommerce-product-gallery')
         image_urls = []
+        image_urls = []
         if slider_parent:
             slider_images = slider_parent.find_all('img')
-            # Convert to set to remove duplicates
-            image_urls_set = set()
+            # Keep the image URLs in the same order as they appear in the HTML
             for img in slider_images:
                 image_url = img['src']
                 # Check if the image size is not 150X150
                 if '150x150' not in image_url:
-                    image_urls_set.add(image_url) # Convert back to list
-            image_urls = list(image_urls_set)
-
+                    image_urls.append(image_url)
+        
         # Find the div with class 'site-breadcrumbs woocommerce-breadcrumbs clr'
         breadcrumbs_div = soup.find('div', class_='site-breadcrumbs woocommerce-breadcrumbs clr')
 
