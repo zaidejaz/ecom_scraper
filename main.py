@@ -78,7 +78,7 @@ def fetch_and_write_product_data(product_url, writer, tag):
         table_tag = soup.find('table', class_='variations')
         select_tag = table_tag.find('select', id='taglia')
         sizes_set = {option.text.split(' - ')[0].split(' ')[-1].strip() for option in select_tag.find_all('option') if option.text.strip() and option['value']}
-        sizes = list(sizes_set)
+        sizes = sorted(list(sizes_set))
         # Product Images
         slider_parent = soup.find('div', class_='woocommerce-product-gallery')
         image_urls = []
@@ -247,20 +247,21 @@ def process_products(html_content, tag, page_count, csv_count):
             unique_links_list = list(unique_links)
 
             # Open CSV file for writing
-            fieldnames = ['Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tag', 'Published', 'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Variant SKU', 'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty', 'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price', 'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode', 'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category', 'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN', 'Google Shopping / Condition', 'Google Shopping / Custom Product', 'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3', 'Google Shopping / Custom Label 4', 'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item', 'Include / Japan', 'Include / International', 'Price / International', 'Compare At Price / International', 'Status']
-            csvfile = open(f'products_{tag}_{csv_count}.csv', 'w', newline='', encoding='utf-8')
-            writer = csv.writer(csvfile)
-            writer.writerow(fieldnames)  # Write header for the new CSV file
+            if page_count == 0:
+                logging.info(f"Creating file for {csv_count} csv file.")
+                fieldnames = ['Handle', 'Title', 'Body (HTML)', 'Vendor', 'Product Category', 'Type', 'Tag', 'Published', 'Option1 Name', 'Option1 Value', 'Option2 Name', 'Option2 Value', 'Variant SKU', 'Variant Grams', 'Variant Inventory Tracker', 'Variant Inventory Qty', 'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price', 'Variant Compare At Price', 'Variant Requires Shipping', 'Variant Taxable', 'Variant Barcode', 'Image Src', 'Image Position', 'Image Alt Text', 'Gift Card', 'SEO Title', 'SEO Description', 'Google Shopping / Google Product Category', 'Google Shopping / Gender', 'Google Shopping / Age Group', 'Google Shopping / MPN', 'Google Shopping / Condition', 'Google Shopping / Custom Product', 'Google Shopping / Custom Label 0', 'Google Shopping / Custom Label 1', 'Google Shopping / Custom Label 2', 'Google Shopping / Custom Label 3', 'Google Shopping / Custom Label 4', 'Variant Image', 'Variant Weight Unit', 'Variant Tax Code', 'Cost per item', 'Include / Japan', 'Include / International', 'Price / International', 'Compare At Price / International', 'Status']
+                csvfile = open(f'products_{tag}_{csv_count}.csv', 'w', newline='', encoding='utf-8')
+                writer = csv.writer(csvfile)
+                writer.writerow(fieldnames)  # Write header for the new CSV file
 
             # Fetch and write product data
-            for link in unique_links:
+            for link in unique_links_list:
                 fetch_and_write_product_data(link, writer, tag)
-
-            csvfile.close()  # Close the CSV file
 
             page_count += 1
 
             if page_count == 10:  # Create a new CSV file after how many pages
+                csvfile.close()  # Close the CSV file
                 csv_count += 1
                 page_count = 0
         else:
